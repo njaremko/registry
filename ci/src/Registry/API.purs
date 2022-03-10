@@ -38,7 +38,7 @@ import Registry.PackageName as PackageName
 import Registry.PackageUpload as Upload
 import Registry.RegistryM (Env, RegistryM, closeIssue, comment, commitToTrunk, deletePackage, readPackagesMetadata, runRegistryM, throwWithComment, updatePackagesMetadata, uploadPackage)
 import Registry.SSH as SSH
-import Registry.Schema (AuthenticatedData(..), AuthenticatedOperation(..), Location(..), Manifest(..), Metadata, Operation(..), UpdateData, addVersionToMetadata, isVersionInMetadata, mkNewMetadata, unpublishVersionInMetadata)
+import Registry.Schema (AuthenticatedData(..), AuthenticatedOperation(..), BuildPlan(..), Location(..), Manifest(..), Metadata, Operation(..), UpdateData, addVersionToMetadata, isVersionInMetadata, mkNewMetadata, unpublishVersionInMetadata)
 import Registry.Scripts.LegacyImport.Error (ImportError(..))
 import Registry.Scripts.LegacyImport.Manifest as Manifest
 import Registry.Types (RawPackageName(..), RawVersion(..))
@@ -319,7 +319,7 @@ addOrUpdate { updateRef, buildPlan, packageName } inputMetadata = do
     metadata =
       inputMetadata { owners = manifestRecord.owners }
 
-  runChecks metadata manifest
+  runChecks buildPlan metadata manifest
 
   -- After we pass all the checks it's time to do side effects and register the package
   log "Packaging the tarball to upload..."
@@ -370,8 +370,8 @@ addOrUpdate { updateRef, buildPlan, packageName } inputMetadata = do
 -- TODO: handle addToPackageSet: we'll try to add it to the latest set and build (see #156)
 -- TODO: upload docs to pursuit (see #154)
 
-runChecks :: Metadata -> Manifest -> RegistryM Unit
-runChecks metadata (Manifest manifest) = do
+runChecks :: BuildPlan -> Metadata -> Manifest -> RegistryM Unit
+runChecks (BuildPlan buildPlan) metadata (Manifest manifest) = do
   -- TODO: collect all errors and return them at once. Note: some of the checks
   -- are going to fail while parsing from JSON, so we should move them here if we
   -- want to handle everything together
@@ -389,9 +389,41 @@ runChecks metadata (Manifest manifest) = do
     pkgNotInRegistry name = case Map.lookup name packages of
       Nothing -> Just name
       Just _p -> Nothing
-  let pkgsNotInRegistry = Array.mapMaybe pkgNotInRegistry $ Set.toUnfoldable $ Map.keys manifest.dependencies
+    pkgsNotInRegistry =
+      Array.mapMaybe pkgNotInRegistry $ Set.toUnfoldable $ Map.keys manifest.dependencies
   unless (Array.null pkgsNotInRegistry) do
     throwWithComment $ "Some dependencies of your package were not found in the Registry: " <> show pkgsNotInRegistry
+
+  log "Check that the package compiles"
+  -- TODO: Verify no dependencies from the manifest are missing from the build plan, and that listed resolutions match the dependency ranges
+  --
+  --       Using: Version.includes (Version ...) (Range ...) -> Boolean
+  --       We can't verify transitive dependencies, so we'll have to take those on faith, but we
+  --       can at least check whether the listed dependencies are present & in correct ranges.
+  --
+  --       Technically, we can walk the dependencies to get the full set of transitive dependencies
+  --       and write down every range, then just verify that each member of the build plan satisfies
+  --       the provided range(s). cc: @colinwahl
+  --
+  -- TODO: Fetch each dependency at its resolved version, unpack the tarball, and place it within
+  --       a specified directory, such as `.package-dependencies` or `.registry`.
+  --
+  --       For example: `.registry/prelude/...`
+  --
+  -- TODO: Attempt to retrieve from easy-purescript-nix the provided compiler version. If it doesn't
+  --       work, tell them you need to be using a compiler version >= 0.13.0 and up to the latest
+  --       major version.
+  --
+  --       Translate the version to a Nix-style version, ie. 0.15.0 -> purs-0_15_0.
+  --
+  --       $ nix-shell -p purs-0_15_0 --run 'purs compile -g corefn <globs>'
+  --
+  --       Need to disambiguate between an invalid PureScript version producing an error or compilation
+  --       producing an error. Either way, report that compilation failed and the package could not
+  --       be registered, and print the error.
+
+  log "Generate package documentations"
+  --  TODO: Possibly go ahead and produce the generated docs for the sake of pushing to Pursuit?
 
 wget :: String -> String -> RegistryM Unit
 wget url path = do

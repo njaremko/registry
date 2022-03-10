@@ -7,6 +7,7 @@ module Registry.Version
   , printVersion
   , parseVersion
   , Range
+  , includes
   , greaterThanOrEq
   , lessThan
   , printRange
@@ -133,6 +134,10 @@ instance RegistryJson Range where
 
 instance Show Range where
   show = printRange
+
+-- | Check whether a range includes the provided version
+includes :: Version -> Range -> Boolean
+includes version (Range { lhs, rhs }) = version >= lhs && version < rhs
 
 greaterThanOrEq :: Range -> Version
 greaterThanOrEq (Range range) = range.lhs
