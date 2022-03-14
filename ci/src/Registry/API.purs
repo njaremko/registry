@@ -419,6 +419,16 @@ publishToPursuit = do
   --       a specified directory, such as `.package-dependencies` or `.registry`.
   --
   --       For example: `.registry/prelude/...`
+  --
+  -- To install all packages...
+  --
+  -- tmp <- mkTmp
+  -- mkdir tmp/dependencies
+  -- for_ buildPlan.plan.dependencies \package version ->
+  --   contents <- GET packages.purescript.org/package/version
+  --   writeFile package tmp/dependencies/package.tar.gz
+  --   tar tmp/dependencies/package.tar.gz (expands to directory)
+  --   rm tmp/depencencies/package.tar.gz
 
   log "Generating package documentation"
   -- TODO: Attempt to retrieve from easy-purescript-nix the provided compiler version. If it doesn't
