@@ -371,7 +371,7 @@ addOrUpdate { updateRef, buildPlan, packageName } inputMetadata = do
 -- TODO: upload docs to pursuit (see #154)
 
 runChecks :: BuildPlan -> Metadata -> Manifest -> RegistryM Unit
-runChecks (BuildPlan buildPlan) metadata (Manifest manifest) = do
+runChecks (BuildPlan _buildPlan) metadata (Manifest manifest) = do
   -- TODO: collect all errors and return them at once. Note: some of the checks
   -- are going to fail while parsing from JSON, so we should move them here if we
   -- want to handle everything together
@@ -423,7 +423,8 @@ runChecks (BuildPlan buildPlan) metadata (Manifest manifest) = do
   --       be registered, and print the error.
 
   log "Generate package documentations"
-  --  TODO: Possibly go ahead and produce the generated docs for the sake of pushing to Pursuit?
+
+--  TODO: Possibly go ahead and produce the generated docs for the sake of pushing to Pursuit?
 
 wget :: String -> String -> RegistryM Unit
 wget url path = do
@@ -570,10 +571,7 @@ readMetadata packageName { noMetadata } = do
 writeMetadata :: PackageName -> Metadata -> { commitFailed :: String -> String, commitSucceeded :: String } -> RegistryM Unit
 writeMetadata packageName metadata { commitFailed, commitSucceeded } = do
   let metadataFilePath = metadataFile packageName
-  liftAff $ Json.writeJsonFile metadataFilePath $ metadata
-    { unpublished = mapKeys Version.printVersion metadata.unpublished
-    , published = mapKeys Version.printVersion metadata.published
-    }
+  liftAff $ Json.writeJsonFile metadataFilePath metadata
   updatePackagesMetadata packageName metadata
   commitToTrunk packageName metadataFilePath >>= case _ of
     Left err -> comment (commitFailed err)

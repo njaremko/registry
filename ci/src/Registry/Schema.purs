@@ -12,8 +12,6 @@ import Registry.Json as Json
 import Registry.PackageName (PackageName)
 import Registry.PackageName as PackageName
 import Registry.Version (Range, Version)
-import Text.Parsing.StringParser as Parser
-import Text.Parsing.StringParser as StringParser
 
 -- | PureScript encoding of ../v1/Manifest.dhall
 newtype Manifest = Manifest
@@ -38,13 +36,11 @@ instance RegistryJson Manifest where
     "location" := fields.location
     "owners" := fields.owners
     "description" := fields.description
-    "dependencies" := mapKeys PackageName.print fields.dependencies
+    "dependencies" := fields.dependencies
 
   decode json = do
     manifestFields <- Json.decode json
-    let parse = lmap StringParser.printParserError <<< PackageName.parse
-    parsed <- traverseKeys parse manifestFields.dependencies
-    pure $ Manifest $ manifestFields { dependencies = parsed }
+    pure $ Manifest manifestFields
 
 -- | A package owner, described using their SSH key and associated email address. It
 -- | is not necessary to provide a valid email address, but the email address
@@ -62,8 +58,6 @@ derive newtype instance Eq Owner
 derive newtype instance Show Owner
 derive newtype instance RegistryJson Owner
 
--- TODO: ToEncodable class
-
 -- | A compiler version and exact dependency versions that should be used to
 -- | compile a newly-uploaded package as an API verification check.
 -- |
@@ -78,15 +72,8 @@ derive newtype instance Eq BuildPlan
 derive newtype instance Show BuildPlan
 
 instance RegistryJson BuildPlan where
-  encode (BuildPlan plan) =
-    Json.encode
-      { compiler: plan.compiler
-      , resolutions: mapKeys PackageName.print plan.resolutions
-      }
-  decode json = do
-    plan <- Json.decode json
-    resolutions <- traverseKeys (lmap Parser.printParserError <<< PackageName.parse) plan.resolutions
-    pure $ BuildPlan $ plan { resolutions = resolutions }
+  encode (BuildPlan plan) = Json.encode plan
+  decode = map BuildPlan <<< Json.decode
 
 type LocationData d =
   { subdir :: Maybe String
