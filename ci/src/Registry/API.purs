@@ -394,9 +394,12 @@ runChecks (BuildPlan _buildPlan) metadata (Manifest manifest) = do
   unless (Array.null pkgsNotInRegistry) do
     throwWithComment $ "Some dependencies of your package were not found in the Registry: " <> show pkgsNotInRegistry
 
-  log "Check that the package compiles"
-  -- TODO: Verify no dependencies from the manifest are missing from the build plan, and that listed resolutions match the dependency ranges
-  --
+  log "Check the submitted build plan matches the manifest"
+  -- Verify no dependencies from the manifest are missing from the build plan, and that listed
+  -- resolutions match the dependency ranges. The build plan can contain additional dependencies
+  -- because of transitive dependencies, which we don't check.
+
+  -- TODO:
   --       Using: Version.includes (Version ...) (Range ...) -> Boolean
   --       We can't verify transitive dependencies, so we'll have to take those on faith, but we
   --       can at least check whether the listed dependencies are present & in correct ranges.
@@ -404,12 +407,20 @@ runChecks (BuildPlan _buildPlan) metadata (Manifest manifest) = do
   --       Technically, we can walk the dependencies to get the full set of transitive dependencies
   --       and write down every range, then just verify that each member of the build plan satisfies
   --       the provided range(s). cc: @colinwahl
-  --
+
+  pure unit
+
+-- TODO: BEFORE this will work, we need to switch from fetching GitHub tarballs to cloning
+-- GitHub repositories directly. See: https://github.com/purescript/registry/issues/356
+publishToPursuit :: RegistryM Unit
+publishToPursuit = do
+  log "Fetching package dependencies"
   -- TODO: Fetch each dependency at its resolved version, unpack the tarball, and place it within
   --       a specified directory, such as `.package-dependencies` or `.registry`.
   --
   --       For example: `.registry/prelude/...`
-  --
+
+  log "Generating package documentation"
   -- TODO: Attempt to retrieve from easy-purescript-nix the provided compiler version. If it doesn't
   --       work, tell them you need to be using a compiler version >= 0.13.0 and up to the latest
   --       major version.
@@ -422,10 +433,48 @@ runChecks (BuildPlan _buildPlan) metadata (Manifest manifest) = do
   --       producing an error. Either way, report that compilation failed and the package could not
   --       be registered, and print the error.
 
-  log "Generate package documentations"
+  log "Publishing the package with 'purs publish'"
+  -- TODO: Use the same compiler version to publish the package via `purs publish`. This requires
+  -- a .purs.json file in the directory containing the source files we're publishing, which we've
+  -- already generated. It also requires a resolutions.json file somewhere OUTSIDE that directory,
+  -- and we provide that path to purs publish. The result is a JSON file of some kind we can push to
+  -- pursuit. This must be gzipped!
+  --
+  --   Produce the correct resolutions format:
+  --   https://github.com/purescript/purescript/pull/3565
+  --
+  --   After writing the build plan to the correct resolutions format in tmp...
+  --   $ purs publish --manifest purs.json --resolutions /tmp/1234/resolutions.json
+  --
+  --   Then we can gzip the result.
+
+  log "Pushing to Pursuit"
+  -- TODO: Make a POST request to Pursuit with a valid auth token (we'll need to get a `registry`
+  -- Pulp account, no spacchettibotti here), plus the gzipped json from purs publish.
+  --
+  --   See: https://github.com/purescript-contrib/pulp/blob/da8480dbe446f3eae82268d9ce842a6f03b3260f/src/Pulp/Publish.purs#L312-L313
+  --
+  -- Note: We need to use something like `aff-retry` or a manual solution to ensure we retry in the
+  -- case there is a network failure. Wait a few seconds and try again, basically.
+
+  pure unit
+
+-- TODO: **MUST** apply `purescript-` prefix to all package names to produce the resolutions format.
+--
+-- Unless we don't? What about new packages that don't use `purescript-`?
+-- Perhaps check if the package GitHub repo had `purescript-` prefixed, and only re-add it if so?
+-- Find a way to thread that information through? Via the manifest `Location`, read the manifest
+-- file to check the location?
+--
+-- TODO: Resolutions format is here: https://github.com/purescript/purescript/pull/3565
+--
+-- TODO: Installation format is `/tmp/1234/dependencies/<NAME>/`
+buildPlanToResolutions :: BuildPlan -> FilePath -> Map RawPackageName { version :: Version, path :: FilePath }
+buildPlanToResolutions _plan _dependencyDirectory = Map.empty
+  where
+  _printName name = RawPackageName ("purescript-" <> PackageName.print name)
 
 --  TODO: Possibly go ahead and produce the generated docs for the sake of pushing to Pursuit?
-
 wget :: String -> String -> RegistryM Unit
 wget url path = do
   let cmd = "wget"
