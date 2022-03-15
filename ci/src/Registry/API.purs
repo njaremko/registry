@@ -429,6 +429,8 @@ publishToPursuit = do
   --   writeFile package tmp/dependencies/package.tar.gz
   --   tar tmp/dependencies/package.tar.gz (expands to directory)
   --   rm tmp/depencencies/package.tar.gz
+  tmpDir <- liftEffect $ Tmp.mkTmpDir
+  liftAff $ FS.mkdir (tmpDir <> Path.sep <> "dependencies")
 
   log "Generating package documentation"
   -- TODO: Attempt to retrieve from easy-purescript-nix the provided compiler version. If it doesn't
@@ -479,10 +481,38 @@ publishToPursuit = do
 -- TODO: Resolutions format is here: https://github.com/purescript/purescript/pull/3565
 --
 -- TODO: Installation format is `/tmp/1234/dependencies/<NAME>/`
-buildPlanToResolutions :: BuildPlan -> FilePath -> Map RawPackageName { version :: Version, path :: FilePath }
-buildPlanToResolutions _plan _dependencyDirectory = Map.empty
+-- Note: Must be executed after installation of dependencies.
+buildPlanToResolutions
+  :: BuildPlan
+  -> FilePath
+  -> RegistryM (Map RawPackageName { version :: Version, path :: FilePath })
+buildPlanToResolutions (BuildPlan { resolutions }) dependencyDirectory = do
+  manifests <- for (Map.toUnfoldable resolutions :: Array _) \(name /\ _) -> do
+    manifestStr <- liftAff $ FS.readTextFile UTF8 (dependencyManifest name)
+    pure $ unsafeFromRight $ (Json.parseJson manifestStr :: Either _ Manifest)
+  -- Go through each manifest
+  -- version is straight from version field
+  -- apply `purescript-` prefix only if Location = Github { repo } s.t. String.prefix "purescript-" repo
+  pure $ Map.fromFoldable do
+    Manifest { version, location, name } <- manifests
+    let
+      key = case location of
+        Git { gitUrl } | String.contains (String.Pattern "purescript-") gitUrl -> printName name
+        GitHub { repo } | String.take 11 repo == "purescript-" -> printName name
+        _ -> RawPackageName (PackageName.print name)
+
+      path = dependencyDir name
+
+    pure $ Tuple key { path, version }
   where
-  _printName name = RawPackageName ("purescript-" <> PackageName.print name)
+  -- TODO: Only add `purescript-` if we stripped it off (check location in manifest)
+  printName name = RawPackageName ("purescript-" <> PackageName.print name)
+
+  dependencyDir name =
+    dependencyDirectory <> Path.sep <> PackageName.print name
+
+  dependencyManifest name =
+    dependencyDir name <> Path.sep <> ".purs.json"
 
 --  TODO: Possibly go ahead and produce the generated docs for the sake of pushing to Pursuit?
 wget :: String -> String -> RegistryM Unit
