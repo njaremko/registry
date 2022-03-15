@@ -497,17 +497,14 @@ buildPlanToResolutions (BuildPlan { resolutions }) dependencyDirectory = do
     Manifest { version, location, name } <- manifests
     let
       key = case location of
-        Git { gitUrl } | String.contains (String.Pattern "purescript-") gitUrl -> printName name
-        GitHub { repo } | String.take 11 repo == "purescript-" -> printName name
+        Git { gitUrl } | String.contains (String.Pattern "purescript-") gitUrl -> RawPackageName ("purescript-" <> PackageName.print name)
+        GitHub { repo } | String.take 11 repo == "purescript-" -> RawPackageName ("purescript-" <> PackageName.print name)
         _ -> RawPackageName (PackageName.print name)
 
       path = dependencyDir name
 
     pure $ Tuple key { path, version }
   where
-  -- TODO: Only add `purescript-` if we stripped it off (check location in manifest)
-  printName name = RawPackageName ("purescript-" <> PackageName.print name)
-
   dependencyDir name =
     dependencyDirectory <> Path.sep <> PackageName.print name
 
