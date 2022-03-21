@@ -488,8 +488,7 @@ buildPlanToResolutions
   -> RegistryM (Map RawPackageName { version :: Version, path :: FilePath })
 buildPlanToResolutions (BuildPlan { resolutions }) dependencyDirectory = do
   manifests <- for (Map.toUnfoldable resolutions :: Array _) \(name /\ _) -> do
-    manifestStr <- liftAff $ FS.readTextFile UTF8 (dependencyManifest name)
-    pure $ unsafeFromRight $ (Json.parseJson manifestStr :: Either _ Manifest)
+    liftAff $ map unsafeFromRight $ Json.readJsonFile (dependencyManifest name)
   -- Go through each manifest
   -- version is straight from version field
   -- apply `purescript-` prefix only if Location = Github { repo } s.t. String.prefix "purescript-" repo
@@ -509,7 +508,7 @@ buildPlanToResolutions (BuildPlan { resolutions }) dependencyDirectory = do
     dependencyDirectory <> Path.sep <> PackageName.print name
 
   dependencyManifest name =
-    dependencyDir name <> Path.sep <> ".purs.json"
+    dependencyDir name <> Path.sep <> "purs.json"
 
 --  TODO: Possibly go ahead and produce the generated docs for the sake of pushing to Pursuit?
 wget :: String -> String -> RegistryM Unit
