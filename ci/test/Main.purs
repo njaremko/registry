@@ -6,6 +6,7 @@ import Data.Array as Array
 import Data.Array.NonEmpty as NEA
 import Data.Foldable (traverse_)
 import Data.Map as Map
+import Data.Newtype (unwrap)
 import Data.String.NonEmpty as NES
 import Data.Time.Duration (Milliseconds(..))
 import Effect.Aff as Exception
@@ -41,7 +42,7 @@ import Test.Support.Manifest as Fixtures
 main :: Effect Unit
 main = launchAff_ do
   -- Setup the Registry Index for tests
-  registryEnv <- Registry.Index.mkTestIndexEnv
+  registryIndexEnv <- Registry.Index.mkTestIndexEnv
 
   -- get Manifest examples paths
   let examplesDir = "../examples/"
@@ -60,6 +61,7 @@ main = launchAff_ do
         Spec.describe "Bad SPDX licenses" badSPDXLicense
         Spec.describe "Decode GitHub event to Operation" decodeEventsToOps
         Spec.describe "Authenticated operations" SSH.spec
+        Spec.describe "Build plan to resolutions" checkBuildPlanToResolutions
       Spec.describe "Tarball" do
         removeIgnoredTarballFiles
     Spec.describe "Bowerfile" do
@@ -74,7 +76,7 @@ main = launchAff_ do
       Spec.describe "Encoding examples" (manifestExamplesRoundtrip manifestExamplePaths)
     Spec.describe "Error Stats" errorStats
     Spec.describe "Registry Index" do
-      Registry.Index.spec registryEnv
+      Registry.Index.spec registryIndexEnv
     Spec.describe "Hash" do
       Registry.Hash.testHash
     Spec.describe "Json" do
@@ -179,6 +181,41 @@ badPackageName = do
   failParse "a-" endErr
   failParse "" startErr
   failParse "🍝" startErr
+
+checkBuildPlanToResolutions :: Spec.Spec Unit
+checkBuildPlanToResolutions = do
+  Spec.it "Produces a correct resolutions file" do
+    createResolutions >>= \{ resolutions, dependencyDirectory } ->
+      resolutions `Assert.shouldEqual` expectedResolutions dependencyDirectory
+  where
+  createResolutions :: Aff
+    { resolutions :: Map RawPackageName { version :: Version, path :: FilePath }
+    , dependencyDirectory :: FilePath
+    }
+  createResolutions = do
+    dependencyDirectory <- liftEffect Tmp.mkTmpDir
+    FS.mkdir (dependencyDirectory <> Path.sep <> PackageName.print (unwrap dependencyManifest).name)
+    Json.writeJsonFile (dependencyDirectory <> Path.sep <> PackageName.print (unwrap dependencyManifest).name <> Path.sep <> "purs.json") dependencyManifest
+    FS.mkdir (dependencyDirectory <> Path.sep <> PackageName.print (unwrap Fixtures.manifestWithDependency).name)
+    resolutions <- API.buildPlanToResolutions buildPlan dependencyDirectory
+    pure { dependencyDirectory, resolutions }
+
+  -- TODO: Check one with purescript- prefix, one without
+  dependencyManifest :: Manifest
+  dependencyManifest = Fixtures.manifest
+
+  expectedResolutions :: FilePath -> Map RawPackageName { version :: Version, path :: FilePath }
+  expectedResolutions dependencyDirectory = Map.fromFoldable
+    [ Tuple (RawPackageName "purescript-fixture-package-name")
+        { version: (unwrap dependencyManifest).version
+        , path: dependencyDirectory <> Path.sep <> PackageName.print (unwrap dependencyManifest).name
+        }
+    ]
+
+  buildPlan :: Map PackageName Version
+  buildPlan = Map.fromFoldable
+    [ Tuple (unwrap dependencyManifest).name (unwrap dependencyManifest).version
+    ]
 
 goodSPDXLicense :: Spec.Spec Unit
 goodSPDXLicense = do
@@ -341,4 +378,3 @@ bowerFileEncoding = do
         , description
         }
     Json.roundtrip bowerFile `Assert.shouldContain` bowerFile
-

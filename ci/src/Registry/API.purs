@@ -483,12 +483,12 @@ publishToPursuit = do
 -- TODO: Installation format is `/tmp/1234/dependencies/<NAME>/`
 -- Note: Must be executed after installation of dependencies.
 buildPlanToResolutions
-  :: BuildPlan
+  :: Map PackageName Version
   -> FilePath
-  -> RegistryM (Map RawPackageName { version :: Version, path :: FilePath })
-buildPlanToResolutions (BuildPlan { resolutions }) dependencyDirectory = do
+  -> Aff (Map RawPackageName { version :: Version, path :: FilePath })
+buildPlanToResolutions resolutions dependencyDirectory = do
   manifests <- for (Map.toUnfoldable resolutions :: Array _) \(name /\ _) -> do
-    liftAff $ map unsafeFromRight $ Json.readJsonFile (dependencyManifest name)
+    map unsafeFromRight $ Json.readJsonFile (dependencyManifest name)
   -- Go through each manifest
   -- version is straight from version field
   -- apply `purescript-` prefix only if Location = Github { repo } s.t. String.prefix "purescript-" repo

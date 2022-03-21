@@ -2,11 +2,13 @@ module Test.Support.Manifest where
 
 import Registry.Prelude
 
+import Data.Array.NonEmpty as NEA
 import Data.Map as Map
+import Data.Newtype (unwrap)
 import Foreign.SPDX as SPDX
 import Registry.PackageName (PackageName)
 import Registry.PackageName as PackageName
-import Registry.Schema (Manifest(..))
+import Registry.Schema (Location(..), Manifest(..), Owner(..))
 import Registry.Schema as Schema
 import Registry.Version (ParseMode(..))
 import Registry.Version as Version
@@ -74,3 +76,27 @@ abcd = { name, v1, v2 }
   description = Just "some description"
   v1 = Manifest { name, owners: Nothing, version: version1, license, location, dependencies: dependencies1, description, files: Nothing }
   v2 = Manifest { name, owners: Nothing, version: version2, license, location, dependencies: dependencies2, description, files: Nothing }
+
+manifest :: Manifest
+manifest = Manifest
+  { name: unsafeFromRight $ PackageName.parse "fixture-package-name"
+  , owners: NEA.fromArray [ Owner { email: "fixture-email", keytype: "RSA", public: "fixture-public-key" } ]
+  , version: unsafeFromRight $ Version.parseVersion Version.Strict "0.10.0"
+  , license: unsafeFromRight $ SPDX.parse "MIT"
+  , location: GitHub { subdir: Nothing, owner: "fixture-repo-owner", repo: "purescript-fixture-package-name" }
+  , description: Nothing
+  , files: Nothing
+  , dependencies: Map.empty
+  }
+
+manifestWithDependency :: Manifest
+manifestWithDependency = Manifest
+  { name: unsafeFromRight $ PackageName.parse "fixture-with-dependencies-package-name"
+  , owners: NEA.fromArray [ Owner { email: "fixture-email", keytype: "RSA", public: "fixture-public-key" } ]
+  , version: unsafeFromRight $ Version.parseVersion Version.Strict "0.10.0"
+  , license: unsafeFromRight $ SPDX.parse "MIT"
+  , location: GitHub { subdir: Nothing, owner: "fixture-repo-owner", repo: "purescript-fixture-with-dependencies-package-name" }
+  , description: Nothing
+  , files: Nothing
+  , dependencies: Map.fromFoldable [ Tuple (unwrap manifest).name (unsafeFromRight $ Version.parseRange Version.Strict ">=0.10.0 <2.0.0") ]
+  }
